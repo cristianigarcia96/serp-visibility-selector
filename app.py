@@ -30,7 +30,11 @@ if run and api_key and keywords_input and brand:
             metadata = results.get("search_metadata", {})
 
             def get_serp_feature_label(path):
-                for key in ["ads", "top_ads", "bottom_ads", "shopping_results", "related_questions", "inline_videos", "organic_results", "knowledge_graph", "related_searches", "related_brands", "immersive_products", "discussions_and_forums"]:
+                for key in [
+                    "ads", "top_ads", "bottom_ads", "shopping_results", "related_questions",
+                    "inline_videos", "organic_results", "knowledge_graph", "related_searches",
+                    "related_brands", "immersive_products", "discussions_and_forums"
+                ]:
                     if f".{key}" in path or path.endswith(f".{key}") or path == key:
                         return key
                 return path.split(".")[1] if "." in path else path
@@ -42,9 +46,11 @@ if run and api_key and keywords_input and brand:
                         if isinstance(v, (dict, list)):
                             scan_json(v, new_key)
                         elif isinstance(v, str) and brand.lower() in v.lower():
+                            base_feature = get_serp_feature_label(parent_key)
+                            sub_feature = obj.get("category") or obj.get("block_title")
+                            feature_label = f"{base_feature}::{sub_feature}" if sub_feature else base_feature
                             context = obj.get("category") or obj.get("block_title") or obj.get("title") or k
                             position = obj.get("position", "-")
-                            feature_label = get_serp_feature_label(parent_key)
                             match_id = (keyword, feature_label)
                             if match_id not in seen_matches:
                                 seen_matches.add(match_id)
