@@ -29,48 +29,38 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
-            for block, content in results.items():
-                if isinstance(content, list):
-                    for i, item in enumerate(content):
-                        if isinstance(item, dict):
-                            item_text = " ".join([str(v) for v in item.values() if isinstance(v, str)])
-                            if brand.lower() in item_text.lower():
-                                position = item.get("position", i + 1)
-                                context = next((v for v in item.values() if isinstance(v, str) and brand.lower() in v.lower()), "-")
-                                category = item.get("category")
-                                feature = f"{block}::{category}" if category else block
-                                match_id = (keyword, feature, context)
-                                if match_id not in seen_matches:
-                                    seen_matches.add(match_id)
-                                    results_list.append({
-                                        "Keyword": keyword,
-                                        "SERP Feature": feature,
-                                        "Context": context,
-                                        "Position": position,
-                                        "JSON URL": metadata.get("json_endpoint", "-"),
-                                        "HTML URL": metadata.get("raw_html_file", "-")
-                                    })
-                elif isinstance(content, dict):
-                    for subkey, subvalue in content.items():
-                        if isinstance(subvalue, list):
-                            for i, subitem in enumerate(subvalue):
-                                if isinstance(subitem, dict):
-                                    item_text = " ".join([str(val) for val in subitem.values() if isinstance(val, str)])
-                                    if brand.lower() in item_text.lower():
-                                        position = subitem.get("position", i + 1)
-                                        context = next((val for val in subitem.values() if isinstance(val, str) and brand.lower() in val.lower()), "-")
-                                        feature = f"{block}::{subkey}"
-                                        match_id = (keyword, feature, context)
-                                        if match_id not in seen_matches:
-                                            seen_matches.add(match_id)
-                                            results_list.append({
-                                                "Keyword": keyword,
-                                                "SERP Feature": feature,
-                                                "Context": context,
-                                                "Position": position,
-                                                "JSON URL": metadata.get("json_endpoint", "-"),
-                                                "HTML URL": metadata.get("raw_html_file", "-")
-                                            })
+            def search_dict(d, path=""):
+                if isinstance(d, dict):
+                    for k, v in d.items():
+                        new_path = f"{path}::{k}" if path else k
+                        if isinstance(v, (dict, list)):
+                            yield from search_dict(v, new_path)
+                        elif isinstance(v, str) and brand.lower() in v.lower():
+                            yield (new_path, v)
+                elif isinstance(d, list):
+                    for i, item in enumerate(d):
+                        new_path = f"{path}[{i}]"
+                        yield from search_dict(item, new_path)
+
+            seen_features = set()
+
+            for path, value in search_dict(results):
+                # find the feature name from path, last 1-2 tokens
+                feature_parts = [p for p in path.split("::") if not p.startswith("[")]
+                feature = feature_parts[-1] if feature_parts else path
+                context = value.strip()[:200]  # Trim long text
+                match_id = (keyword, feature, context)
+                if match_id not in seen_matches:
+                    seen_matches.add(match_id)
+                    results_list.append({
+                        "Keyword": keyword,
+                        "SERP Feature": feature,
+                        "Context": context,
+                        "Position": "-",
+                        "JSON URL": metadata.get("json_endpoint", "-"),
+                        "HTML URL": metadata.get("raw_html_file", "-")
+                    })
+
             time.sleep(1.2)
 
     if results_list:
