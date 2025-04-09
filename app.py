@@ -85,12 +85,14 @@ if run and api_key and keywords_input and brand and selected_features:
                     parent, child = feature.split("::", 1)
                     if parent == "immersive_products" and parent in results:
                         for item in results[parent]:
-                            if item.get("category", "") == child and brand.lower() in str(item).lower():
+                            category = item.get("category", "").lower()
+                            if child.lower() == category and brand.lower() in str(item).lower():
                                 found = True
                                 break
                     elif parent == "related_brands" and parent in results:
                         for item in results[parent]:
-                            if item.get("block_title", "") == child and brand.lower() in str(item.get("link", "")).lower():
+                            block = item.get("block_title", "").lower()
+                            if block == child.lower() and brand.lower() in str(item.get("link", "")).lower():
                                 found = True
                                 break
                 else:
