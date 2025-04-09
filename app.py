@@ -3,12 +3,10 @@ from serpapi import GoogleSearch
 import pandas as pd
 from datetime import datetime
 import time
-from streamlit.components.v1 import html
 
 st.set_page_config(page_title="SERP Visibility Tracker", layout="wide")
 
 # === Sidebar UI ===
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png", width=40)
 st.sidebar.title("🔍 SERP Visibility Tracker")
 st.sidebar.markdown("Track your brand's visibility across Google SERP features.")
 
@@ -39,6 +37,10 @@ st.markdown("""
             background-color: #4CAF50;
             color: white;
         }
+        .stButton button {
+            background-color: #1f77b4;
+            color: white;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -65,9 +67,7 @@ if run and api_key and keywords_input and brand:
                 position = item.get("position")
                 if brand.lower() in str(item).lower():
                     key = (keyword, "Organic results")
-                    serp_mentions.setdefault(key, {"Top Position": float('inf')})
-                    if position and position < serp_mentions[key]["Top Position"]:
-                        serp_mentions[key]["Top Position"] = position
+                    serp_mentions.setdefault(key, []).append(position)
 
             # === Other Features ===
             def search_features(data, path=""):
@@ -83,7 +83,7 @@ if run and api_key and keywords_input and brand:
                                 category = item.get("category", "immersive_products")
                                 if brand.lower() in str(item).lower():
                                     key = (keyword, category)
-                                    serp_mentions.setdefault(key, {"Top Position": float('inf')})
+                                    serp_mentions.setdefault(key, []).append(None)
 
                         elif isinstance(v, (dict, list)):
                             search_features(v, new_path)
@@ -91,7 +91,7 @@ if run and api_key and keywords_input and brand:
                             label_key = next((p for p in path.split("::") if p in feature_map), path.split("::")[-1])
                             feature_name = feature_map.get(label_key, label_key)
                             key = (keyword, feature_name)
-                            serp_mentions.setdefault(key, {"Top Position": float('inf')})
+                            serp_mentions.setdefault(key, []).append(None)
 
                 elif isinstance(data, list):
                     for item in data:
@@ -99,11 +99,12 @@ if run and api_key and keywords_input and brand:
 
             search_features(results)
 
-            for (kw, feature), stats in serp_mentions.items():
+            for (kw, feature), positions in serp_mentions.items():
+                valid_positions = [p for p in positions if isinstance(p, int)]
                 summary_results.append({
                     "Keyword": kw,
                     "SERP Feature": feature,
-                    "Top Position": int(stats["Top Position"]) if stats["Top Position"] != float('inf') else "-",
+                    "Top Position": min(valid_positions) if valid_positions else "-",
                     "JSON URL": metadata.get("json_endpoint", "-"),
                     "HTML URL": metadata.get("raw_html_file", "-")
                 })
@@ -112,7 +113,6 @@ if run and api_key and keywords_input and brand:
 
     if summary_results:
         df = pd.DataFrame(summary_results)
-        st.balloons()
         st.success("✅ Brand visibility summary:")
 
         st.dataframe(df, use_container_width=True)
