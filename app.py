@@ -29,29 +29,46 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
-            # Loop through top-level SERP features only
             for block, content in results.items():
-                if block in ["ads", "organic_results", "related_searches", "immersive_products", "inline_videos", "discussions_and_forums", "local_results", "shopping_results", "top_stories", "knowledge_graph", "video_results", "image_results", "people_also_ask"]:
-                    if isinstance(content, list):
-                        for item in content:
-                            if isinstance(item, dict):
-                                item_text = " ".join([str(v) for v in item.values() if isinstance(v, str)])
-                                if brand.lower() in item_text.lower():
-                                    position = item.get("position", "-")
-                                    context = next((v for v in item.values() if isinstance(v, str) and brand.lower() in v.lower()), "-")
-
-                                    match_id = (keyword, block, context)
-                                    if match_id not in seen_matches:
-                                        seen_matches.add(match_id)
-                                        results_list.append({
-                                            "Keyword": keyword,
-                                            "SERP Feature": block,
-                                            "Context": context,
-                                            "Position": position,
-                                            "JSON URL": metadata.get("json_endpoint", "-"),
-                                            "HTML URL": metadata.get("raw_html_file", "-")
-                                        })
-
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict):
+                            item_text = " ".join([str(v) for v in item.values() if isinstance(v, str)])
+                            if brand.lower() in item_text.lower():
+                                position = item.get("position", "-")
+                                context = next((v for v in item.values() if isinstance(v, str) and brand.lower() in v.lower()), "-")
+                                match_id = (keyword, block, context)
+                                if match_id not in seen_matches:
+                                    seen_matches.add(match_id)
+                                    results_list.append({
+                                        "Keyword": keyword,
+                                        "SERP Feature": block,
+                                        "Context": context,
+                                        "Position": position,
+                                        "JSON URL": metadata.get("json_endpoint", "-"),
+                                        "HTML URL": metadata.get("raw_html_file", "-")
+                                    })
+                elif isinstance(content, dict):
+                    # Special case for nested structures like related_searches
+                    for k, v in content.items():
+                        if isinstance(v, list):
+                            for subitem in v:
+                                if isinstance(subitem, dict):
+                                    item_text = " ".join([str(val) for val in subitem.values() if isinstance(val, str)])
+                                    if brand.lower() in item_text.lower():
+                                        position = subitem.get("position", "-")
+                                        context = next((val for val in subitem.values() if isinstance(val, str) and brand.lower() in val.lower()), "-")
+                                        match_id = (keyword, block, context)
+                                        if match_id not in seen_matches:
+                                            seen_matches.add(match_id)
+                                            results_list.append({
+                                                "Keyword": keyword,
+                                                "SERP Feature": block,
+                                                "Context": context,
+                                                "Position": position,
+                                                "JSON URL": metadata.get("json_endpoint", "-"),
+                                                "HTML URL": metadata.get("raw_html_file", "-")
+                                            })
             time.sleep(1.2)
 
     if results_list:
