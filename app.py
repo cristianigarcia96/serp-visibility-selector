@@ -15,6 +15,7 @@ run = st.sidebar.button("Run Visibility Check")
 if run and api_key and keywords_input and brand:
     keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
     results_list = []
+    seen_matches = set()
 
     with st.spinner("Running visibility checks..."):
         for keyword in keywords:
@@ -28,6 +29,12 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
+            def get_serp_feature_label(path):
+                for key in ["ads", "top_ads", "bottom_ads", "shopping_results", "related_questions", "inline_videos", "organic_results", "knowledge_graph", "related_searches", "related_brands", "immersive_products", "discussions_and_forums"]:
+                    if f".{key}" in path or path.endswith(f".{key}") or path == key:
+                        return key
+                return path.split(".")[1] if "." in path else path
+
             def scan_json(obj, parent_key="root"):
                 if isinstance(obj, dict):
                     for k, v in obj.items():
@@ -37,16 +44,18 @@ if run and api_key and keywords_input and brand:
                         elif isinstance(v, str) and brand.lower() in v.lower():
                             context = obj.get("category") or obj.get("block_title") or obj.get("title") or k
                             position = obj.get("position", "-")
-                            results_list.append({
-                                "Keyword": keyword,
-                                "SERP Feature": parent_key.split(".")[1] if "." in parent_key else parent_key,
-                                "Context": context,
-                                "Matched Field": k,
-                                "Matched Value": v,
-                                "Position": position,
-                                "JSON URL": metadata.get("json_endpoint", "-"),
-                                "HTML URL": metadata.get("raw_html_file", "-")
-                            })
+                            feature_label = get_serp_feature_label(parent_key)
+                            match_id = (keyword, feature_label)
+                            if match_id not in seen_matches:
+                                seen_matches.add(match_id)
+                                results_list.append({
+                                    "Keyword": keyword,
+                                    "SERP Feature": feature_label,
+                                    "Context": context,
+                                    "Position": position,
+                                    "JSON URL": metadata.get("json_endpoint", "-"),
+                                    "HTML URL": metadata.get("raw_html_file", "-")
+                                })
                 elif isinstance(obj, list):
                     for item in obj:
                         scan_json(item, parent_key)
