@@ -27,27 +27,26 @@ if st.sidebar.button("Fetch SERP Features"):
                 results = GoogleSearch(params).get_dict()
                 features = set(results.keys())
 
-                # Include nested values as selectable labels for more clarity
-                if "immersive_products" in results:
-                    for item in results["immersive_products"]:
-                        if isinstance(item, dict):
-                            cat = item.get("category")
-                            if cat:
-                                features.add(f"immersive_products::{cat}")
+                # Check nested features from immersive_products
+                immersive = results.get("immersive_products", [])
+                for item in immersive:
+                    if isinstance(item, dict):
+                        cat = item.get("category")
+                        if cat:
+                            features.add(f"immersive_products::{cat.strip()}")
 
-                if "related_brands" in results:
-                    for item in results["related_brands"]:
-                        if isinstance(item, dict):
-                            block = item.get("block_title")
-                            if block:
-                                features.add(f"related_brands::{block}")
+                related = results.get("related_brands", [])
+                for item in related:
+                    if isinstance(item, dict):
+                        block = item.get("block_title")
+                        if block:
+                            features.add(f"related_brands::{block.strip()}")
 
                 return sorted(features)
         except Exception as e:
             st.error(f"Error fetching features: {e}")
         return []
 
-    # Use first real keyword for feature fetching
     keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
     sample_keyword = keywords[0] if keywords else "test"
     st.session_state.available_features = get_available_features(api_key, sample_keyword)
@@ -80,23 +79,24 @@ if run and api_key and keywords_input and brand and selected_features:
             for feature in selected_features:
                 found = False
 
-                # Split for nested category/feature
                 if "::" in feature:
                     parent, child = feature.split("::", 1)
-                    if parent == "immersive_products" and parent in results:
-                        for item in results[parent]:
-                            category = item.get("category", "").lower()
-                            if child.lower() == category and brand.lower() in str(item).lower():
-                                found = True
-                                break
-                    elif parent == "related_brands" and parent in results:
-                        for item in results[parent]:
-                            block = item.get("block_title", "").lower()
-                            if block == child.lower() and brand.lower() in str(item.get("link", "")).lower():
-                                found = True
-                                break
+                    data = results.get(parent, [])
+
+                    if parent == "immersive_products":
+                        for item in data:
+                            if item.get("category", "").lower() == child.lower():
+                                if brand.lower() in str(item).lower():
+                                    found = True
+                                    break
+
+                    elif parent == "related_brands":
+                        for item in data:
+                            if item.get("block_title", "").lower() == child.lower():
+                                if brand.lower() in item.get("link", "").lower():
+                                    found = True
+                                    break
                 else:
-                    # Direct top-level key
                     if feature in results:
                         value = results[feature]
                         if isinstance(value, list):
@@ -111,7 +111,6 @@ if run and api_key and keywords_input and brand and selected_features:
 
                 row[feature] = "Yes" if found else ("-" if feature not in results else "No")
 
-            # Add metadata URLs
             metadata = results.get("search_metadata", {})
             row["JSON URL"] = metadata.get("json_endpoint", "-")
             row["HTML URL"] = metadata.get("raw_html_file", "-")
