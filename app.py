@@ -11,23 +11,6 @@ brand = st.sidebar.text_input("Brand Name to Track", "")
 keywords_input = st.sidebar.text_area("Keywords (one per line)", "")
 run = st.sidebar.button("Run Visibility Check")
 
-# === Context field preferences by SERP feature ===
-context_fields_by_feature = {
-    "immersive_products": ["category", "title"],
-    "related_brands": ["title", "snippet"],
-    "related_questions": ["question"],
-    "inline_videos": ["title"],
-    "organic_results": ["title", "snippet"],
-    "knowledge_graph": ["title"],
-    "related_searches": ["name"],
-    "ads": ["title", "snippet"],
-    "top_ads": ["title", "snippet"],
-    "bottom_ads": ["title", "snippet"],
-    "shopping_results": ["title"],
-    "discussions_and_forums": ["title", "snippet"],
-    "default": ["category", "block_title", "title", "name", "question", "snippet"]
-}
-
 # === Run the check ===
 if run and api_key and keywords_input and brand:
     keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
@@ -46,31 +29,25 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
-            def get_serp_feature_label(path):
-                for key in context_fields_by_feature.keys():
-                    if f".{key}" in path or path.endswith(f".{key}") or path == key:
-                        return key
-                return path.split(".")[1] if "." in path else path
-
-            def scan_json(obj, parent_key="root"):
+            def find_brand_mentions(obj, path=""):
                 if isinstance(obj, dict):
                     for k, v in obj.items():
-                        new_key = f"{parent_key}.{k}" if parent_key else k
+                        new_path = f"{path}.{k}" if path else k
                         if isinstance(v, (dict, list)):
-                            scan_json(v, new_key)
+                            find_brand_mentions(v, new_path)
                         elif isinstance(v, str) and brand.lower() in v.lower():
-                            base_feature = get_serp_feature_label(parent_key)
-                            sub_feature = obj.get("category") or obj.get("block_title")
-                            feature_label = f"{base_feature}::{sub_feature}" if sub_feature else base_feature
-                            fields = context_fields_by_feature.get(base_feature, context_fields_by_feature["default"])
-                            context = next((obj.get(field) for field in fields if obj.get(field)), "-")
+                            context = " | ".join(
+                                [str(val) for val in obj.values() if isinstance(val, str) and brand.lower() in val.lower()]
+                            )
                             position = obj.get("position", "-")
-                            match_id = (keyword, feature_label, context)
+                            feature = new_path.split(".")[1] if "." in new_path else new_path
+
+                            match_id = (keyword, feature, context)
                             if match_id not in seen_matches:
                                 seen_matches.add(match_id)
                                 results_list.append({
                                     "Keyword": keyword,
-                                    "SERP Feature": feature_label,
+                                    "SERP Feature": feature,
                                     "Context": context,
                                     "Position": position,
                                     "JSON URL": metadata.get("json_endpoint", "-"),
@@ -78,9 +55,9 @@ if run and api_key and keywords_input and brand:
                                 })
                 elif isinstance(obj, list):
                     for item in obj:
-                        scan_json(item, parent_key)
+                        find_brand_mentions(item, path)
 
-            scan_json(results)
+            find_brand_mentions(results)
             time.sleep(1.2)
 
     if results_list:
