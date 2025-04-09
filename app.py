@@ -29,35 +29,29 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
-            def find_brand_mentions(obj, path=""):
-                if isinstance(obj, dict):
-                    for k, v in obj.items():
-                        new_path = f"{path}.{k}" if path else k
-                        if isinstance(v, (dict, list)):
-                            find_brand_mentions(v, new_path)
-                        elif isinstance(v, str) and brand.lower() in v.lower():
-                            context = " | ".join(
-                                [str(val) for val in obj.values() if isinstance(val, str) and brand.lower() in val.lower()]
-                            )
-                            position = obj.get("position", "-")
-                            feature = new_path.split(".")[1] if "." in new_path else new_path
+            # Loop through top-level SERP features only
+            for block, content in results.items():
+                if block in ["ads", "organic_results", "related_searches", "immersive_products", "inline_videos", "discussions_and_forums", "local_results", "shopping_results", "top_stories", "knowledge_graph", "video_results", "image_results", "people_also_ask"]:
+                    if isinstance(content, list):
+                        for item in content:
+                            if isinstance(item, dict):
+                                item_text = " ".join([str(v) for v in item.values() if isinstance(v, str)])
+                                if brand.lower() in item_text.lower():
+                                    position = item.get("position", "-")
+                                    context = next((v for v in item.values() if isinstance(v, str) and brand.lower() in v.lower()), "-")
 
-                            match_id = (keyword, feature, context)
-                            if match_id not in seen_matches:
-                                seen_matches.add(match_id)
-                                results_list.append({
-                                    "Keyword": keyword,
-                                    "SERP Feature": feature,
-                                    "Context": context,
-                                    "Position": position,
-                                    "JSON URL": metadata.get("json_endpoint", "-"),
-                                    "HTML URL": metadata.get("raw_html_file", "-")
-                                })
-                elif isinstance(obj, list):
-                    for item in obj:
-                        find_brand_mentions(item, path)
+                                    match_id = (keyword, block, context)
+                                    if match_id not in seen_matches:
+                                        seen_matches.add(match_id)
+                                        results_list.append({
+                                            "Keyword": keyword,
+                                            "SERP Feature": block,
+                                            "Context": context,
+                                            "Position": position,
+                                            "JSON URL": metadata.get("json_endpoint", "-"),
+                                            "HTML URL": metadata.get("raw_html_file", "-")
+                                        })
 
-            find_brand_mentions(results)
             time.sleep(1.2)
 
     if results_list:
