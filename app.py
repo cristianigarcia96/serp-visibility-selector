@@ -15,11 +15,11 @@ if "available_features" not in st.session_state:
     st.session_state.available_features = []
 
 if st.sidebar.button("Fetch SERP Features"):
-    def get_available_features(api_key):
+    def get_available_features(api_key, query):
         try:
             if api_key:
                 params = {
-                    "q": "test",
+                    "q": query,
                     "hl": "en",
                     "gl": "us",
                     "api_key": api_key
@@ -43,7 +43,10 @@ if st.sidebar.button("Fetch SERP Features"):
             st.error(f"Error fetching features: {e}")
         return []
 
-    st.session_state.available_features = get_available_features(api_key)
+    # Use first real keyword for feature fetching
+    keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
+    sample_keyword = keywords[0] if keywords else "test"
+    st.session_state.available_features = get_available_features(api_key, sample_keyword)
 
 selected_features = st.sidebar.multiselect(
     "Select SERP features to track:",
