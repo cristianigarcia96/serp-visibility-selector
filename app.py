@@ -13,7 +13,6 @@ run = st.sidebar.button("Run Visibility Check")
 
 # === Feature labeling overrides ===
 feature_map = {
-    "immersive_products": "Popular products",
     "related_searches": "Related searches",
     "knowledge_graph": "Knowledge panel",
     "organic_results": "Organic results",
@@ -24,8 +23,8 @@ feature_map = {
 
 if run and api_key and keywords_input and brand:
     keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
-    results_list = []
-    seen_matches = set()
+    summary_results = []
+    seen = set()
 
     with st.spinner("Running visibility checks..."):
         for keyword in keywords:
@@ -39,43 +38,59 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
-            def search_dict(d, path=""):
-                if isinstance(d, dict):
-                    for k, v in d.items():
-                        new_path = f"{path}::{k}" if path else k
-                        if isinstance(v, (dict, list)):
-                            yield from search_dict(v, new_path)
-                        elif isinstance(v, str) and brand.lower() in v.lower():
-                            yield (new_path, v)
-                elif isinstance(d, list):
-                    for i, item in enumerate(d):
-                        new_path = f"{path}[{i}]"
-                        yield from search_dict(item, new_path)
+            matches = {}
 
-            for path, value in search_dict(results):
-                path_parts = [p for p in path.split("::") if not p.startswith("[")]
-                feature_key = next((p for p in path_parts if p in feature_map), path_parts[0] if path_parts else "other")
+            def recursive_search(data, path=""):
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        new_path = f"{path}::{k}" if path else k
+
+                        # For immersive_products, use category if available
+                        if k == "immersive_products" and isinstance(v, list):
+                            for i, item in enumerate(v):
+                                category = item.get("category", "immersive_products")
+                                new_feature_name = f"{k}::{category}"
+                                for sub_k, sub_v in item.items():
+                                    sub_path = f"{new_path}[{i}]::{sub_k}"
+                                    if isinstance(sub_v, str) and brand.lower() in sub_v.lower():
+                                        yield (new_feature_name, sub_v, i + 1)
+                        elif isinstance(v, (dict, list)):
+                            yield from recursive_search(v, new_path)
+                        elif isinstance(v, str) and brand.lower() in v.lower():
+                            yield (new_path, v, None)
+                elif isinstance(data, list):
+                    for i, item in enumerate(data):
+                        new_path = f"{path}[{i}]"
+                        yield from recursive_search(item, new_path)
+
+            for path, value, index in recursive_search(results):
+                path_parts = [p.split("[")[0] for p in path.split("::") if not p.endswith("[]")]
+                feature_key = next((p for p in path_parts if p in feature_map or p.startswith("immersive_products")), path_parts[0] if path_parts else "other")
                 feature_name = feature_map.get(feature_key, feature_key)
 
-                context = value.strip()[:200]  # Trim long text
-                match_id = (keyword, feature_name, context)
+                position = index if index is not None else "-"
+                match_key = (keyword, feature_name)
 
-                if match_id not in seen_matches:
-                    seen_matches.add(match_id)
-                    results_list.append({
+                if match_key not in matches:
+                    matches[match_key] = {
                         "Keyword": keyword,
                         "SERP Feature": feature_name,
-                        "Context": context,
-                        "Position": "-",
+                        "Mentions": 1,
+                        "Top Position": position,
                         "JSON URL": metadata.get("json_endpoint", "-"),
                         "HTML URL": metadata.get("raw_html_file", "-")
-                    })
+                    }
+                else:
+                    matches[match_key]["Mentions"] += 1
+                    if position != "-" and (matches[match_key]["Top Position"] == "-" or position < matches[match_key]["Top Position"]):
+                        matches[match_key]["Top Position"] = position
 
+            summary_results.extend(matches.values())
             time.sleep(1.2)
 
-    if results_list:
-        df = pd.DataFrame(results_list)
-        st.success("✅ Brand visibility matches found:")
+    if summary_results:
+        df = pd.DataFrame(summary_results)
+        st.success("✅ Brand visibility summary:")
         st.dataframe(df)
 
         csv = df.to_csv(index=False).encode('utf-8')
