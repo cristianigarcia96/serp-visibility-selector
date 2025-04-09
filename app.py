@@ -24,7 +24,6 @@ feature_map = {
 if run and api_key and keywords_input and brand:
     keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
     summary_results = []
-    seen = set()
 
     with st.spinner("Running visibility checks..."):
         for keyword in keywords:
@@ -38,54 +37,59 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
-            matches = {}
+            serp_mentions = {}
 
-            def recursive_search(data, path=""):
+            # === Organic Results with Position ===
+            for item in results.get("organic_results", []):
+                position = item.get("position")
+                if brand.lower() in str(item).lower():
+                    key = (keyword, "Organic results")
+                    serp_mentions.setdefault(key, {"Top Position": float('inf')})
+                    if position and position < serp_mentions[key]["Top Position"]:
+                        serp_mentions[key]["Top Position"] = position
+
+            # === Other Features ===
+            def search_features(data, path=""):
                 if isinstance(data, dict):
                     for k, v in data.items():
+                        if k == "organic_results":
+                            continue  # already handled above
+
                         new_path = f"{path}::{k}" if path else k
 
-                        # For immersive_products, use category if available
+                        # Handle immersive_products specifically
                         if k == "immersive_products" and isinstance(v, list):
-                            for i, item in enumerate(v):
+                            for item in v:
                                 category = item.get("category", "immersive_products")
-                                new_feature_name = f"{k}::{category}"
-                                for sub_k, sub_v in item.items():
-                                    sub_path = f"{new_path}[{i}]::{sub_k}"
-                                    if isinstance(sub_v, str) and brand.lower() in sub_v.lower():
-                                        yield (new_feature_name, sub_v, i + 1)
+                                if brand.lower() in str(item).lower():
+                                    key = (keyword, category)
+                                    serp_mentions.setdefault(key, {"Top Position": float('inf')})
+
+                        # General dict or list
                         elif isinstance(v, (dict, list)):
-                            yield from recursive_search(v, new_path)
+                            search_features(v, new_path)
                         elif isinstance(v, str) and brand.lower() in v.lower():
-                            yield (new_path, v, None)
+                            label_key = next((p for p in path.split("::") if p in feature_map), path.split("::")[0])
+                            feature_name = feature_map.get(label_key, label_key)
+                            key = (keyword, feature_name)
+                            serp_mentions.setdefault(key, {"Top Position": float('inf')})
+
                 elif isinstance(data, list):
-                    for i, item in enumerate(data):
-                        new_path = f"{path}[{i}]"
-                        yield from recursive_search(item, new_path)
+                    for item in data:
+                        search_features(item, path)
 
-            for path, value, index in recursive_search(results):
-                path_parts = [p.split("[")[0] for p in path.split("::") if not p.endswith("[]")]
-                feature_key = next((p for p in path_parts if p in feature_map or p.startswith("immersive_products")), path_parts[0] if path_parts else "other")
-                feature_name = feature_map.get(feature_key, feature_key)
+            search_features(results)
 
-                position = index if index is not None else "-"
-                match_key = (keyword, feature_name)
+            # === Assemble Results ===
+            for (kw, feature), stats in serp_mentions.items():
+                summary_results.append({
+                    "Keyword": kw,
+                    "SERP Feature": feature,
+                    "Top Position": int(stats["Top Position"]) if stats["Top Position"] != float('inf') else "-",
+                    "JSON URL": metadata.get("json_endpoint", "-"),
+                    "HTML URL": metadata.get("raw_html_file", "-")
+                })
 
-                if match_key not in matches:
-                    matches[match_key] = {
-                        "Keyword": keyword,
-                        "SERP Feature": feature_name,
-                        "Mentions": 1,
-                        "Top Position": position,
-                        "JSON URL": metadata.get("json_endpoint", "-"),
-                        "HTML URL": metadata.get("raw_html_file", "-")
-                    }
-                else:
-                    matches[match_key]["Mentions"] += 1
-                    if position != "-" and (matches[match_key]["Top Position"] == "-" or position < matches[match_key]["Top Position"]):
-                        matches[match_key]["Top Position"] = position
-
-            summary_results.extend(matches.values())
             time.sleep(1.2)
 
     if summary_results:
