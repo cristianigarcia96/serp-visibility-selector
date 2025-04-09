@@ -3,13 +3,19 @@ from serpapi import GoogleSearch
 import pandas as pd
 from datetime import datetime
 import time
+from streamlit.components.v1 import html
+
+st.set_page_config(page_title="SERP Visibility Tracker", layout="wide")
 
 # === Sidebar UI ===
+st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png", width=40)
 st.sidebar.title("🔍 SERP Visibility Tracker")
-api_key = st.sidebar.text_input("SerpAPI Key", type="password")
-brand = st.sidebar.text_input("Brand Name to Track", "")
-keywords_input = st.sidebar.text_area("Keywords (one per line)", "")
-run = st.sidebar.button("Run Visibility Check")
+st.sidebar.markdown("Track your brand's visibility across Google SERP features.")
+
+api_key = st.sidebar.text_input("🔐 SerpAPI Key", type="password")
+brand = st.sidebar.text_input("🏷️ Brand Name to Track")
+keywords_input = st.sidebar.text_area("📝 Keywords (one per line)")
+run = st.sidebar.button("🚀 Run Visibility Check")
 
 # === Feature labeling overrides ===
 feature_map = {
@@ -21,11 +27,26 @@ feature_map = {
     "shopping_results": "Shopping results"
 }
 
+st.markdown("""
+    <style>
+        .main .block-container {
+            padding-top: 2rem;
+        }
+        .stDataFrame thead tr th {
+            background-color: #f4f4f4;
+        }
+        .stDownloadButton button {
+            background-color: #4CAF50;
+            color: white;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 if run and api_key and keywords_input and brand:
     keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
     summary_results = []
 
-    with st.spinner("Running visibility checks..."):
+    with st.spinner("🔍 Running visibility checks across keywords..."):
         for keyword in keywords:
             params = {
                 "q": keyword,
@@ -57,7 +78,6 @@ if run and api_key and keywords_input and brand:
 
                         new_path = f"{path}::{k}" if path else k
 
-                        # Handle immersive_products specifically
                         if k == "immersive_products" and isinstance(v, list):
                             for item in v:
                                 category = item.get("category", "immersive_products")
@@ -65,11 +85,10 @@ if run and api_key and keywords_input and brand:
                                     key = (keyword, category)
                                     serp_mentions.setdefault(key, {"Top Position": float('inf')})
 
-                        # General dict or list
                         elif isinstance(v, (dict, list)):
                             search_features(v, new_path)
                         elif isinstance(v, str) and brand.lower() in v.lower():
-                            label_key = next((p for p in path.split("::") if p in feature_map), path.split("::")[0])
+                            label_key = next((p for p in path.split("::") if p in feature_map), path.split("::")[-1])
                             feature_name = feature_map.get(label_key, label_key)
                             key = (keyword, feature_name)
                             serp_mentions.setdefault(key, {"Top Position": float('inf')})
@@ -80,7 +99,6 @@ if run and api_key and keywords_input and brand:
 
             search_features(results)
 
-            # === Assemble Results ===
             for (kw, feature), stats in serp_mentions.items():
                 summary_results.append({
                     "Keyword": kw,
@@ -94,15 +112,18 @@ if run and api_key and keywords_input and brand:
 
     if summary_results:
         df = pd.DataFrame(summary_results)
+        st.balloons()
         st.success("✅ Brand visibility summary:")
-        st.dataframe(df)
+
+        st.dataframe(df, use_container_width=True)
 
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download CSV",
             data=csv,
             file_name=f"visibility_{brand}_{datetime.today().strftime('%Y-%m-%d')}.csv",
-            mime='text/csv'
+            mime='text/csv',
+            key="download-csv"
         )
     else:
-        st.warning("No brand mentions found in SERP features.")
+        st.warning("⚠️ No brand mentions found in SERP features.")
