@@ -11,6 +11,23 @@ brand = st.sidebar.text_input("Brand Name to Track", "")
 keywords_input = st.sidebar.text_area("Keywords (one per line)", "")
 run = st.sidebar.button("Run Visibility Check")
 
+# === Context field preferences by SERP feature ===
+context_fields_by_feature = {
+    "immersive_products": ["category", "title"],
+    "related_brands": ["title", "snippet"],
+    "related_questions": ["question"],
+    "inline_videos": ["title"],
+    "organic_results": ["title", "snippet"],
+    "knowledge_graph": ["title"],
+    "related_searches": ["name"],
+    "ads": ["title", "snippet"],
+    "top_ads": ["title", "snippet"],
+    "bottom_ads": ["title", "snippet"],
+    "shopping_results": ["title"],
+    "discussions_and_forums": ["title", "snippet"],
+    "default": ["category", "block_title", "title", "name", "question", "snippet"]
+}
+
 # === Run the check ===
 if run and api_key and keywords_input and brand:
     keywords = [k.strip() for k in keywords_input.split("\n") if k.strip()]
@@ -30,11 +47,7 @@ if run and api_key and keywords_input and brand:
             metadata = results.get("search_metadata", {})
 
             def get_serp_feature_label(path):
-                for key in [
-                    "ads", "top_ads", "bottom_ads", "shopping_results", "related_questions",
-                    "inline_videos", "organic_results", "knowledge_graph", "related_searches",
-                    "related_brands", "immersive_products", "discussions_and_forums"
-                ]:
+                for key in context_fields_by_feature.keys():
                     if f".{key}" in path or path.endswith(f".{key}") or path == key:
                         return key
                 return path.split(".")[1] if "." in path else path
@@ -49,9 +62,10 @@ if run and api_key and keywords_input and brand:
                             base_feature = get_serp_feature_label(parent_key)
                             sub_feature = obj.get("category") or obj.get("block_title")
                             feature_label = f"{base_feature}::{sub_feature}" if sub_feature else base_feature
-                            context = obj.get("category") or obj.get("block_title") or obj.get("title") or k
+                            fields = context_fields_by_feature.get(base_feature, context_fields_by_feature["default"])
+                            context = next((obj.get(field) for field in fields if obj.get(field)), "-")
                             position = obj.get("position", "-")
-                            match_id = (keyword, feature_label)
+                            match_id = (keyword, feature_label, context)
                             if match_id not in seen_matches:
                                 seen_matches.add(match_id)
                                 results_list.append({
