@@ -26,13 +26,18 @@ if st.sidebar.button("Fetch SERP Features"):
                 }
                 results = GoogleSearch(params).get_dict()
                 features = set(results.keys())
-                # Include nested category labels from known nested lists
+
+                # Include nested values as selectable labels for more clarity
                 if "immersive_products" in results:
-                    categories = set([item.get("category") for item in results["immersive_products"] if isinstance(item, dict) and "category" in item])
-                    features.update(categories)
+                    for item in results["immersive_products"]:
+                        if isinstance(item, dict) and "category" in item:
+                            features.add(f"immersive_products::{item['category']}")
+
                 if "related_brands" in results:
-                    block_titles = set([item.get("block_title") for item in results["related_brands"] if isinstance(item, dict) and "block_title" in item])
-                    features.update(block_titles)
+                    for item in results["related_brands"]:
+                        if isinstance(item, dict) and "block_title" in item:
+                            features.add(f"related_brands::{item['block_title']}")
+
                 return sorted(features)
         except Exception as e:
             st.error(f"Error fetching features: {e}")
@@ -68,34 +73,39 @@ if run and api_key and keywords_input and brand and selected_features:
             for feature in selected_features:
                 found = False
 
-                # Direct top-level key
-                if feature in results:
-                    value = results[feature]
-                    if isinstance(value, list):
-                        found = brand.lower() in str(value).lower()
-                    elif isinstance(value, dict):
-                        if feature == "knowledge_graph":
-                            website = value.get("website")
-                            if website:
-                                found = brand.lower() in website.lower()
-                        else:
+                # Split for nested category/feature
+                if "::" in feature:
+                    parent, child = feature.split("::", 1)
+                    if parent == "immersive_products" and parent in results:
+                        for item in results[parent]:
+                            if item.get("category") == child and brand.lower() in str(item).lower():
+                                found = True
+                                break
+                    elif parent == "related_brands" and parent in results:
+                        for item in results[parent]:
+                            if item.get("block_title") == child and brand.lower() in str(item.get("link", "")).lower():
+                                found = True
+                                break
+                else:
+                    # Direct top-level key
+                    if feature in results:
+                        value = results[feature]
+                        if isinstance(value, list):
                             found = brand.lower() in str(value).lower()
-
-                # Check within nested immersive_products categories
-                if not found and "immersive_products" in results:
-                    for item in results["immersive_products"]:
-                        if item.get("category") == feature:
-                            found = brand.lower() in str(item).lower()
-                            break
-
-                # Check within nested related_brands block_title
-                if not found and "related_brands" in results:
-                    for item in results["related_brands"]:
-                        if item.get("block_title") == feature:
-                            found = brand.lower() in str(item.get("link", "")).lower()
-                            break
+                        elif isinstance(value, dict):
+                            if feature == "knowledge_graph":
+                                website = value.get("website")
+                                if website:
+                                    found = brand.lower() in website.lower()
+                            else:
+                                found = brand.lower() in str(value).lower()
 
                 row[feature] = "Yes" if found else ("-" if feature not in results else "No")
+
+            # Add metadata URLs
+            metadata = results.get("search_metadata", {})
+            row["JSON URL"] = metadata.get("json_endpoint", "-")
+            row["HTML URL"] = metadata.get("raw_html_file", "-")
 
             results_list.append(row)
             time.sleep(1.2)
