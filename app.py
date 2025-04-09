@@ -28,38 +28,30 @@ if run and api_key and keywords_input and brand:
             results = search.get_dict()
             metadata = results.get("search_metadata", {})
 
-            for key, value in results.items():
-                if isinstance(value, list):
-                    for item in value:
-                        if isinstance(item, dict):
-                            for field, field_value in item.items():
-                                if isinstance(field_value, str) and brand.lower() in field_value.lower():
-                                    context = item.get("category") or item.get("block_title") or item.get("title") or key
-                                    position = item.get("position", "-")
-                                    results_list.append({
-                                        "Keyword": keyword,
-                                        "SERP Feature": key,
-                                        "Context": context,
-                                        "Matched Field": field,
-                                        "Matched Value": field_value,
-                                        "Position": position,
-                                        "JSON URL": metadata.get("json_endpoint", "-"),
-                                        "HTML URL": metadata.get("raw_html_file", "-")
-                                    })
-                elif isinstance(value, dict):
-                    for field, field_value in value.items():
-                        if isinstance(field_value, str) and brand.lower() in field_value.lower():
+            def scan_json(obj, parent_key="root"):
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        new_key = f"{parent_key}.{k}" if parent_key else k
+                        if isinstance(v, (dict, list)):
+                            scan_json(v, new_key)
+                        elif isinstance(v, str) and brand.lower() in v.lower():
+                            context = obj.get("category") or obj.get("block_title") or obj.get("title") or k
+                            position = obj.get("position", "-")
                             results_list.append({
                                 "Keyword": keyword,
-                                "SERP Feature": key,
-                                "Context": key,
-                                "Matched Field": field,
-                                "Matched Value": field_value,
-                                "Position": value.get("position", "-"),
+                                "SERP Feature": parent_key.split(".")[1] if "." in parent_key else parent_key,
+                                "Context": context,
+                                "Matched Field": k,
+                                "Matched Value": v,
+                                "Position": position,
                                 "JSON URL": metadata.get("json_endpoint", "-"),
                                 "HTML URL": metadata.get("raw_html_file", "-")
                             })
+                elif isinstance(obj, list):
+                    for item in obj:
+                        scan_json(item, parent_key)
 
+            scan_json(results)
             time.sleep(1.2)
 
     if results_list:
